@@ -1,0 +1,200 @@
+{
+	"providers": {
+		"Cloudflare": [
+			{
+				"name": "Cirrus",
+				"uri": "https://ct.cloudflare.com/logs/cirrus"
+			},
+			{
+				"name": "Nimbus (2017)",
+				"uri": "https://ct.cloudflare.com/logs/nimbus2017"
+			},
+			{
+				"name": "Nimbus (2018)",
+				"uri": "https://ct.cloudflare.com/logs/nimbus2018"
+			},
+			{
+				"name": "Nimbus (2019)",
+				"uri": "https://ct.cloudflare.com/logs/nimbus2019"
+			},
+			{
+				"name": "Nimbus (2020)",
+				"uri": "https://ct.cloudflare.com/logs/nimbus2020"
+			},
+			{
+				"name": "Nimbus (2021)",
+				"uri": "https://ct.cloudflare.com/logs/nimbus2021"
+			},
+			{
+				"name": "Nimbus (2022)",
+				"uri": "https://ct.cloudflare.com/logs/nimbus2022"
+			},
+			{
+				"name": "Nimbus (2023)",
+				"uri": "https://ct.cloudflare.com/logs/nimbus2023"
+			}
+		],
+		"Digicert": [
+			{
+				"name": "1",
+				"uri": "https://ct1.digicert-ct.com/log"
+			},
+			{
+				"name": "Nessie (2020)",
+				"uri": "https://nessie2020.ct.digicert.com/log"
+			},
+			{
+				"name": "Nessie (2021)",
+				"uri": "https://nessie2021.ct.digicert.com/log"
+			},
+			{
+				"name": "Nessie (2022)",
+				"uri": "https://nessie2022.ct.digicert.com/log"
+			},
+			{
+				"name": "Nessie (2023)",
+				"uri": "https://nessie2023.ct.digicert.com/log"
+			},
+			{
+				"name": "Yeti (2020)",
+				"uri": "https://yeti2020.ct.digicert.com/log"
+			},
+			{
+				"name": "Yeti (2021)",
+				"uri": "https://yeti2021.ct.digicert.com/log"
+			},
+			{
+				"name": "Yeti (2022)",
+				"uri": "https://yeti2022.ct.digicert.com/log"
+			},
+			{
+				"name": "Yeti (2023)",
+				"uri": "https://yeti2023.ct.digicert.com/log"
+			}
+		],
+		"Google": [
+			{
+				"name": "Argon (2017)",
+				"uri": "https://ct.googleapis.com/logs/argon2017"
+			},
+			{
+				"name": "Argon (2018)",
+				"uri": "https://ct.googleapis.com/logs/argon2018"
+			},
+			{
+				"name": "Argon (2019)",
+				"uri": "https://ct.googleapis.com/logs/argon2019"
+			},
+			{
+				"name": "Argon (2020)",
+				"uri": "https://ct.googleapis.com/logs/argon2020"
+			},
+			{
+				"name": "Argon (2021)",
+				"uri": "https://ct.googleapis.com/logs/argon2021"
+			},
+			{
+				"name": "Argon (2022)",
+				"uri": "https://ct.googleapis.com/logs/argon2022"
+			},
+			{
+				"name": "Argon (2023)",
+				"uri": "https://ct.googleapis.com/logs/argon2023"
+			},
+			{
+				"name": "Aviator",
+				"uri": "https://ct.googleapis.com/aviator"
+			},
+			{
+				"name": "Icarus",
+				"uri": "https://ct.googleapis.com/icarus"
+			},
+			{
+				"name": "Pilot",
+				"uri": "https://ct.googleapis.com/pilot"
+			},
+			{
+				"name": "Rocketeer",
+				"uri": "https://ct.googleapis.com/rocketeer"
+			},
+			{
+				"name": "Skydiver",
+				"uri": "https://ct.googleapis.com/skydiver"
+			},
+			{
+				"name": "Xenon (2018)",
+				"uri": "https://ct.googleapis.com/logs/xenon2018"
+			},
+			{
+				"name": "Xenon (2019)",
+				"uri": "https://ct.googleapis.com/logs/xenon2019"
+			},
+			{
+				"name": "Xenon (2020)",
+				"uri": "https://ct.googleapis.com/logs/xenon2020"
+			},
+			{
+				"name": "Xenon (2021)",
+				"uri": "https://ct.googleapis.com/logs/xenon2021"
+			},
+			{
+				"name": "Xenon (2022)",
+				"uri": "https://ct.googleapis.com/logs/xenon2022"
+			},
+			{
+				"name": "Xenon (2023)",
+				"uri": "https://ct.googleapis.com/logs/xenon2023"
+			}
+		],
+		"Let's Encrypt": [
+			{
+				"name": "Oak (2019)",
+				"uri": "https://oak.ct.letsencrypt.org/2019"
+			},
+			{
+				"name": "Oak (2020)",
+				"uri": "https://oak.ct.letsencrypt.org/2020"
+			},
+			{
+				"name": "Oak (2021)",
+				"uri": "https://oak.ct.letsencrypt.org/2021"
+			},
+			{
+				"name": "Oak (2022)",
+				"uri": "https://oak.ct.letsencrypt.org/2022"
+			},
+			{
+				"name": "Oak (2023)",
+				"uri": "https://oak.ct.letsencrypt.org/2023"
+			}
+		],
+		"Qihoo": [
+			{
+				"name": "360 (2020)",
+				"uri": "https://ct.browser.360.cn/2020"
+			},
+			{
+				"name": "360 (2021)",
+				"uri": "https://ct.browser.360.cn/2021"
+			},
+			{
+				"name": "360 (2022)",
+				"uri": "https://ct.browser.360.cn/2022"
+			},
+			{
+				"name": "360 (2023)",
+				"uri": "https://ct.browser.360.cn/2023"
+			}
+		],
+		"Sectigo": [
+			{
+				"name": "Mammoth",
+				"uri": "https://mammoth.ct.comodo.com"
+			},
+			{
+				"name": "Mammoth",
+				"uri": "https://sabre.ct.comodo.com"
+			}
+		]
+	}
+}
