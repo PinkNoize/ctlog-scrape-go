@@ -14,13 +14,21 @@ import (
 	"sync"
 	"time"
 
+	"github.com/briandowns/spinner"
 	ct "github.com/google/certificate-transparency-go"
 	"github.com/google/certificate-transparency-go/client"
 	"github.com/google/certificate-transparency-go/jsonclient"
 	"github.com/google/certificate-transparency-go/scanner"
 	"github.com/google/certificate-transparency-go/x509"
+	"github.com/paulbellamy/ratecounter"
 )
 
+// Flags
+
+var tFlag = flag.Int("t", 5, "Number of workers per provider")
+var nFlag = flag.Int("n", 2, "Number of providers to scan at once")
+
+// Global Queue
 var domainQueue chan string
 
 type CTLog struct {
@@ -54,7 +62,8 @@ func parseConfig(file []byte, cfg *Config) error {
 	return nil
 }
 
-func storeDomainWorker(domains chan string, finished chan bool) {
+func storeDomainWorker(finished chan bool) {
+	defer func() { finished <- true }()
 	f, err := os.Create("domains")
 	check(err)
 	defer f.Close()
@@ -62,17 +71,28 @@ func storeDomainWorker(domains chan string, finished chan bool) {
 	defer gf.Close()
 	outfile := bufio.NewWriter(gf)
 	defer outfile.Flush()
+
+	s := spinner.New(spinner.CharSets[11], 100*time.Millisecond, spinner.WithWriter(os.Stderr))
+	counter := ratecounter.NewRateCounter(1 * time.Second)
+	s.Start()
+	go func() {
+		for {
+			s.Suffix = fmt.Sprintf(" %v domains/s", counter.Rate())
+			time.Sleep(1 * time.Second)
+		}
+	}()
 	uniqueDomains := make(map[string]struct{})
-	for domain := range domains {
+	for domain := range domainQueue {
 		// Store domain
 		if _, ok := uniqueDomains[domain]; !ok {
 			uniqueDomains[domain] = struct{}{}
 			outfile.WriteString(domain)
 			outfile.WriteByte('\n')
+			counter.Incr(1)
 		}
+
 	}
 	fmt.Printf("Unique Domains: %v\n", len(uniqueDomains))
-	finished <- true
 }
 
 func ctlogStats(wg *sync.WaitGroup, cfg scanConfig) {
@@ -94,18 +114,14 @@ func ctlogStats(wg *sync.WaitGroup, cfg scanConfig) {
 				cfg.ctLog.Name,
 			)
 		case <-cfg.stop:
-			if len(cfg.domainQueue) == 0 && len(cfg.errorQueue) == 0 {
-				// Print Stats
-				fmt.Printf(
-					"Done scanning %v %v\nDomains: %v\nErrors: %v\n",
-					cfg.provider, cfg.ctLog.Name,
-					ndomains,
-					nerrors,
-				)
-				return
-			} else {
-				cfg.stop <- true
-			}
+			// Print Stats
+			fmt.Printf(
+				"Done scanning %v %v\nDomains: %v\nErrors: %v\n",
+				cfg.provider, cfg.ctLog.Name,
+				ndomains,
+				nerrors,
+			)
+			return
 		}
 	}
 }
@@ -113,14 +129,23 @@ func ctlogStats(wg *sync.WaitGroup, cfg scanConfig) {
 func startScan(cfg scanConfig) {
 	scanClient, err := client.New(cfg.ctLog.URI, &http.Client{
 		Timeout: 10 * time.Second,
+		Transport: &http.Transport{
+			TLSHandshakeTimeout:   30 * time.Second,
+			ResponseHeaderTimeout: 30 * time.Second,
+			MaxIdleConnsPerHost:   10,
+			DisableKeepAlives:     false,
+			MaxIdleConns:          100,
+			IdleConnTimeout:       90 * time.Second,
+			ExpectContinueTimeout: 1 * time.Second,
+		},
 	},
-		jsonclient.Options{},
+		jsonclient.Options{UserAgent: "ct-go-scanlog/1.0"}, // maybe its whitelisted?
 	)
 	check(err)
 	scanOpts := scanner.ScannerOptions{
 		FetcherOptions: scanner.FetcherOptions{
-			BatchSize:     1024,
-			ParallelFetch: 1,
+			BatchSize:     1000,
+			ParallelFetch: *tFlag,
 			StartIndex:    0,
 			EndIndex:      0,
 			Continuous:    false,
@@ -138,6 +163,9 @@ func startScan(cfg scanConfig) {
 				return
 			} else {
 				cfg.domainQueue <- entry.X509Cert.Subject.CommonName
+				for _, alt := range entry.X509Cert.DNSNames {
+					cfg.domainQueue <- alt
+				}
 			}
 		},
 		// Process PreCert
@@ -148,8 +176,12 @@ func startScan(cfg scanConfig) {
 				return
 			} else {
 				cfg.domainQueue <- entry.Precert.TBSCertificate.Subject.CommonName
+				for _, alt := range entry.Precert.TBSCertificate.DNSNames {
+					cfg.domainQueue <- alt
+				}
 			}
-		})
+		},
+	)
 }
 
 func scanProvider(wg *sync.WaitGroup, provider string, ctlogs []CTLog) {
@@ -161,10 +193,14 @@ func scanProvider(wg *sync.WaitGroup, provider string, ctlogs []CTLog) {
 			ctLog:       &c,
 			domainQueue: make(chan string, 512),
 			errorQueue:  make(chan int64, 512),
+			stop:        make(chan bool),
 		}
 		wg.Add(1)
 		go ctlogStats(wg, cfg)
 		startScan(cfg)
+		for len(cfg.domainQueue) > 0 && len(cfg.errorQueue) > 0 {
+			time.Sleep(500 * time.Millisecond)
+		}
 		cfg.stop <- true
 	}
 }
@@ -179,11 +215,17 @@ func main() {
 
 	domainQueue = make(chan string, 1024)
 	finished := make(chan bool)
-	go storeDomainWorker(domainQueue, finished)
+	go storeDomainWorker(finished)
 	var scannerWg sync.WaitGroup
+	activeProviders := 0
 	// Parallelize each provider scan
 	for provider, ctlogs := range cfg.CTLogs {
+		if activeProviders >= *nFlag {
+			scannerWg.Wait()
+			activeProviders = 0
+		}
 		scannerWg.Add(1)
+		activeProviders += 1
 		go scanProvider(&scannerWg, provider, ctlogs)
 	}
 	scannerWg.Wait()
