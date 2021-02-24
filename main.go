@@ -20,6 +20,7 @@ import (
 	"github.com/google/certificate-transparency-go/jsonclient"
 	"github.com/google/certificate-transparency-go/scanner"
 	"github.com/google/certificate-transparency-go/x509"
+	lru "github.com/hashicorp/golang-lru"
 	"github.com/paulbellamy/ratecounter"
 )
 
@@ -27,6 +28,8 @@ import (
 
 var tFlag = flag.Int("t", 5, "Number of workers per provider")
 var nFlag = flag.Int("n", 2, "Number of providers to scan at once")
+var cFlag = flag.Int("c", 150000, "Domain cache size")
+var bFlag = flag.Bool("b", false, "Test cache size and exit")
 
 // Global Queue
 var domainQueue chan string
@@ -64,6 +67,8 @@ func parseConfig(file []byte, cfg *Config) error {
 
 func storeDomainWorker(finished chan bool) {
 	defer func() { finished <- true }()
+	domainCache, err := lru.New(*cFlag)
+	check(err)
 	f, err := os.Create("domains")
 	check(err)
 	defer f.Close()
@@ -81,18 +86,19 @@ func storeDomainWorker(finished chan bool) {
 			time.Sleep(1 * time.Second)
 		}
 	}()
-	uniqueDomains := make(map[string]struct{})
+	var domainsSeen uint64 = 0
 	for domain := range domainQueue {
 		// Store domain
-		if _, ok := uniqueDomains[domain]; !ok {
-			uniqueDomains[domain] = struct{}{}
+		if !domainCache.Contains(domain) {
+			domainCache.Add(domain, struct{}{})
 			outfile.WriteString(domain)
 			outfile.WriteByte('\n')
 			counter.Incr(1)
+			domainsSeen += 1
 		}
 
 	}
-	fmt.Printf("Unique Domains: %v\n", len(uniqueDomains))
+	fmt.Printf("Unique Domains: %v\n", domainsSeen)
 }
 
 func ctlogStats(wg *sync.WaitGroup, cfg scanConfig) {
@@ -205,9 +211,26 @@ func scanProvider(wg *sync.WaitGroup, provider string, ctlogs []CTLog) {
 	}
 }
 
+func cacheTest() {
+	c, err := lru.New(*cFlag)
+	check(err)
+	for i := 0; i < *cFlag; i++ {
+		c.Add(fmt.Sprintf("%v.subdomain.test.example.com", i), struct{}{})
+	}
+	fmt.Println("Cache Filled")
+	// Give time for user to view system memory
+	time.Sleep(5 * time.Second)
+	fmt.Println("Cache Test Successful")
+}
+
 func main() {
 	var cfg Config
 	flag.Parse()
+	if *bFlag {
+		cacheTest()
+		os.Exit(0)
+	}
+
 	data, err := ioutil.ReadFile("CTLogs.json")
 	check(err)
 	err = parseConfig(data, &cfg)
