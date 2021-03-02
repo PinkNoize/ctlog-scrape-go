@@ -14,7 +14,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/briandowns/spinner"
 	ct "github.com/google/certificate-transparency-go"
 	"github.com/google/certificate-transparency-go/client"
 	"github.com/google/certificate-transparency-go/jsonclient"
@@ -31,8 +30,8 @@ var nFlag = flag.Int("n", 2, "Number of providers to scan at once")
 var cFlag = flag.Int("c", 150000, "Domain cache size")
 var bFlag = flag.Bool("b", false, "Test cache size and exit")
 
-// Global Queue
-var domainQueue chan string
+// Global Domain Cache
+var domainCache *lru.Cache
 
 type CTLog struct {
 	Name string `json:"name"`
@@ -65,11 +64,11 @@ func parseConfig(file []byte, cfg *Config) error {
 	return nil
 }
 
-func storeDomainWorker(finished chan bool) {
-	defer func() { finished <- true }()
-	domainCache, err := lru.New(*cFlag)
-	check(err)
-	f, err := os.Create("domains")
+func ctlogStats(wg *sync.WaitGroup, cfg scanConfig) {
+	var ndomains, nerrors uint64 = 0, 0
+	defer wg.Done()
+
+	f, err := os.Create(fmt.Sprintf("%v-%v.domains", cfg.provider, cfg.ctLog.Name))
 	check(err)
 	defer f.Close()
 	gf := gzip.NewWriter(f)
@@ -77,39 +76,38 @@ func storeDomainWorker(finished chan bool) {
 	outfile := bufio.NewWriter(gf)
 	defer outfile.Flush()
 
-	s := spinner.New(spinner.CharSets[11], 100*time.Millisecond, spinner.WithWriter(os.Stderr))
 	counter := ratecounter.NewRateCounter(1 * time.Second)
-	s.Start()
+	quit := make(chan bool)
 	go func() {
+		f, err := os.Create(fmt.Sprintf("%v-%v.stats", cfg.provider, cfg.ctLog.Name))
+		check(err)
+		defer f.Close()
 		for {
-			s.Suffix = fmt.Sprintf(" %v domains/s", counter.Rate())
+			select {
+			case <-quit:
+				return
+			default:
+			}
+			f.Truncate(0)
+			f.Seek(0, 0)
+			f.WriteString(fmt.Sprintf(" %v domains/s\n", counter.Rate()))
 			time.Sleep(1 * time.Second)
 		}
 	}()
-	var domainsSeen uint64 = 0
-	for domain := range domainQueue {
-		// Store domain
-		if !domainCache.Contains(domain) {
-			domainCache.Add(domain, struct{}{})
-			outfile.WriteString(domain)
-			outfile.WriteByte('\n')
-			counter.Incr(1)
-			domainsSeen += 1
-		}
 
-	}
-	fmt.Printf("Unique Domains: %v\n", domainsSeen)
-}
-
-func ctlogStats(wg *sync.WaitGroup, cfg scanConfig) {
-	var ndomains, nerrors uint64 = 0, 0
-	defer wg.Done()
 	fmt.Printf("Scanning %v %v\n", cfg.provider, cfg.ctLog.Name)
 	for {
 		select {
 		case d := <-cfg.domainQueue:
-			ndomains++
-			domainQueue <- d
+
+			// Store domain
+			if !domainCache.Contains(d) {
+				domainCache.Add(d, struct{}{})
+				outfile.WriteString(d)
+				outfile.WriteByte('\n')
+				counter.Incr(1)
+				ndomains++
+			}
 		case e := <-cfg.errorQueue:
 			nerrors++
 			fmt.Fprintf(
@@ -127,6 +125,7 @@ func ctlogStats(wg *sync.WaitGroup, cfg scanConfig) {
 				ndomains,
 				nerrors,
 			)
+			quit <- true
 			return
 		}
 	}
@@ -197,7 +196,7 @@ func scanProvider(wg *sync.WaitGroup, provider string, ctlogs []CTLog) {
 		cfg := scanConfig{
 			provider:    provider,
 			ctLog:       &c,
-			domainQueue: make(chan string, 512),
+			domainQueue: make(chan string, 1024),
 			errorQueue:  make(chan int64, 512),
 			stop:        make(chan bool),
 		}
@@ -219,7 +218,7 @@ func cacheTest() {
 	}
 	fmt.Println("Cache Filled")
 	// Give time for user to view system memory
-	time.Sleep(5 * time.Second)
+	time.Sleep(10 * time.Second)
 	fmt.Println("Cache Test Successful")
 }
 
@@ -236,9 +235,8 @@ func main() {
 	err = parseConfig(data, &cfg)
 	check(err)
 
-	domainQueue = make(chan string, 1024)
-	finished := make(chan bool)
-	go storeDomainWorker(finished)
+	domainCache, err = lru.New(*cFlag)
+	check(err)
 	var scannerWg sync.WaitGroup
 	activeProviders := 0
 	// Parallelize each provider scan
@@ -252,6 +250,4 @@ func main() {
 		go scanProvider(&scannerWg, provider, ctlogs)
 	}
 	scannerWg.Wait()
-	close(domainQueue)
-	<-finished
 }
