@@ -11,6 +11,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"regexp"
 	"sync"
 	"time"
 
@@ -32,6 +33,8 @@ var bFlag = flag.Bool("b", false, "Test cache size and exit")
 
 // Global Domain Cache
 var domainCache *lru.Cache
+
+var domainValidator *regexp.Regexp = regexp.MustCompile(`(?mi)^[\w-\*]*(?:\.[\w-]+)+$`)
 
 type CTLog struct {
 	Name string `json:"name"`
@@ -131,6 +134,10 @@ func ctlogStats(wg *sync.WaitGroup, cfg scanConfig) {
 	}
 }
 
+func isDomain(domain string) bool {
+	return domainValidator.MatchString(domain)
+}
+
 func startScan(cfg scanConfig) {
 	scanClient, err := client.New(cfg.ctLog.URI, &http.Client{
 		Timeout: 10 * time.Second,
@@ -167,9 +174,13 @@ func startScan(cfg scanConfig) {
 				cfg.errorQueue <- rawLog.Index
 				return
 			} else {
-				cfg.domainQueue <- entry.X509Cert.Subject.CommonName
+				if isDomain(entry.X509Cert.Subject.CommonName) {
+					cfg.domainQueue <- entry.X509Cert.Subject.CommonName
+				}
 				for _, alt := range entry.X509Cert.DNSNames {
-					cfg.domainQueue <- alt
+					if isDomain(alt) {
+						cfg.domainQueue <- alt
+					}
 				}
 			}
 		},
@@ -180,9 +191,13 @@ func startScan(cfg scanConfig) {
 				cfg.errorQueue <- rawLog.Index
 				return
 			} else {
-				cfg.domainQueue <- entry.Precert.TBSCertificate.Subject.CommonName
+				if isDomain(entry.Precert.TBSCertificate.Subject.CommonName) {
+					cfg.domainQueue <- entry.Precert.TBSCertificate.Subject.CommonName
+				}
 				for _, alt := range entry.Precert.TBSCertificate.DNSNames {
-					cfg.domainQueue <- alt
+					if isDomain(alt) {
+						cfg.domainQueue <- alt
+					}
 				}
 			}
 		},
