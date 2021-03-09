@@ -262,7 +262,9 @@ func main() {
 		}
 		scannerWg.Add(1)
 		activeProviders += 1
-		go scanProvider(&scannerWg, provider, ctlogs)
+		ctLogsCpy := make([]CTLog, len(ctlogs))
+		copy(ctLogsCpy, ctlogs)
+		go scanProvider(&scannerWg, provider, ctLogsCpy)
 	}
 	scannerWg.Wait()
 }
